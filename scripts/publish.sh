@@ -26,7 +26,7 @@ title() {
   case "$PKG" in
     postgres) echo PostgreSQL ;; mariadb) echo MariaDB ;; mysql) echo MySQL ;; mongodb) echo MongoDB ;;
     redis) echo Redis ;; valkey) echo Valkey ;; meilisearch) echo Meilisearch ;; typesense) echo Typesense ;;
-    rustfs) echo RustFS ;; node) echo Node.js ;; php) echo PHP ;; php-exts) echo "PHP extensions" ;;
+    rustfs) echo RustFS ;; keycloak) echo Keycloak ;; node) echo Node.js ;; php) echo PHP ;; php-exts) echo "PHP extensions" ;;
     frankenphp) echo "FrankenPHP for PHP" ;; *) echo "$PKG" ;;
   esac
 }

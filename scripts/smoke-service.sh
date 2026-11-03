@@ -144,6 +144,53 @@ case "$PKG" in
     check "stop" stop "$pid"
     ;;
 
+  keycloak)
+    # Runs Java as Flock does (internal/catalog/kinds.go), from folders with a space like
+    # "Application Support". A first start rebuilds Keycloak and exits with 10 to be relaunched,
+    # which Flock's supervisor does.
+    home="$tmp/with space"; kc_data="$tmp/kc data"
+    mv "$D" "$home"; mkdir -p "$kc_data"
+    kc_start() {
+      KC_BOOTSTRAP_ADMIN_USERNAME=admin KC_BOOTSTRAP_ADMIN_PASSWORD=admin "$home/jre/bin/java" \
+        -Xms64m -Xmx512m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -Dfile.encoding=UTF-8 \
+        --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED \
+        --add-opens=java.base/java.security=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --enable-native-access=ALL-UNNAMED \
+        -Djava.util.concurrent.ForkJoinPool.common.threadFactory=io.quarkus.bootstrap.forkjoin.QuarkusForkJoinWorkerThreadFactory \
+        -Djava.util.logging.manager=org.jboss.logmanager.LogManager -Dpicocli.disable.closures=true -Djava.awt.headless=true \
+        "-Dkc.home.dir=$home" "-Djboss.server.config.dir=$home/conf" "-Dkeycloak.theme.dir=$home/themes" "-Dkc.db-url-path=$kc_data" \
+        -cp "$home/lib/quarkus-run.jar" io.quarkus.bootstrap.runner.QuarkusEntryPoint \
+        start-dev --http-host=127.0.0.1 --http-port=8189 --http-management-port=8190 --health-enabled=true "--db-url-properties=;WRITE_DELAY=0" >>"$tmp/log" 2>&1 &
+      pid=$!
+    }
+    kc_ready() {
+      for _ in $(seq 1 1200); do
+        curl -fs http://127.0.0.1:8190/health/ready >/dev/null && return 0
+        if ! kill -0 "$pid" 2>/dev/null; then
+          wait "$pid"; [[ $? == 10 ]] || return 1
+          kc_start
+        fi
+        sleep 0.2
+      done
+      return 1
+    }
+    check "java: $("$home/jre/bin/java" -version 2>&1 | head -1)" "$home/jre/bin/java" -version
+    kc_start
+    if kc_ready; then ok "keycloak is ready"; else fail "keycloak did not start: $(tail -20 "$tmp/log")"; fi
+    token="$(curl -fs -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin \
+      http://127.0.0.1:8189/realms/master/protocol/openid-connect/token | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
+    check "admin login" test -n "$token"
+    check "create a realm" curl -fs -X POST http://127.0.0.1:8189/admin/realms -H "Authorization: Bearer $token" \
+      -H 'Content-Type: application/json' -d '{"realm":"flock","enabled":true}'
+    check "binds to 127.0.0.1 only" bash -c '! curl -fs -m 2 "http://$(ipconfig getifaddr en0 2>/dev/null || hostname -I | cut -d" " -f1):8189/" >/dev/null'
+    # Killed, as on Windows, where Flock has no graceful way to stop it.
+    kill -9 "$pid"; wait "$pid" 2>/dev/null
+    check "database is outside the package" test -n "$(find "$kc_data" -name '*.mv.db' -print -quit)"
+    kc_start
+    if kc_ready; then ok "restarts after being killed"; else fail "keycloak did not restart: $(tail -20 "$tmp/log")"; fi
+    check "the realm survived" curl -fs http://127.0.0.1:8189/realms/flock
+    check "stops gracefully" stop "$pid"
+    ;;
+
   cloudflared)
     # Flock needs --allowed-mail (protected quick tunnels): without it a share would be unprotected.
     check "$("$D/cloudflared" --version 2>&1 | head -1)" "$D/cloudflared" --version

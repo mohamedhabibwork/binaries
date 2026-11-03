@@ -157,6 +157,48 @@ switch ($Package) {
         Check 'listens' { Wait-Port 9109 $p "$tmp/err.log" }
         Stop-Server $p
     }
+    'keycloak' {
+        # Runs Java as Flock does (internal/catalog/kinds.go), from folders with a space. A first
+        # start rebuilds Keycloak and exits for a relaunch, which Flock's supervisor does. Stopping
+        # kills the process, as on Windows Flock has no graceful way, and the data has to survive it.
+        $home_ = Join-Path $tmp 'with space'
+        $kcData = Join-Path $tmp 'kc data'
+        Move-Item $D $home_
+        New-Item -ItemType Directory -Force $kcData | Out-Null
+        $h = $home_ -replace '\\', '/'
+        $kd = $kcData -replace '\\', '/'
+        $env:KC_BOOTSTRAP_ADMIN_USERNAME = 'admin'
+        $env:KC_BOOTSTRAP_ADMIN_PASSWORD = 'admin'
+        $kcArgs = @('-Xms64m', '-Xmx512m', '-XX:MaxMetaspaceSize=256m', '-XX:+ExitOnOutOfMemoryError', '-XX:+UseG1GC', '-Dfile.encoding=UTF-8',
+            '--add-opens=java.base/java.util=ALL-UNNAMED', '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+            '--add-opens=java.base/java.security=ALL-UNNAMED', '--add-opens=java.base/java.lang=ALL-UNNAMED', '--enable-native-access=ALL-UNNAMED',
+            '-Djava.util.concurrent.ForkJoinPool.common.threadFactory=io.quarkus.bootstrap.forkjoin.QuarkusForkJoinWorkerThreadFactory',
+            '-Djava.util.logging.manager=org.jboss.logmanager.LogManager', '-Dpicocli.disable.closures=true', '-Djava.awt.headless=true',
+            "-Dkc.home.dir=$h", "-Djboss.server.config.dir=$h/conf", "-Dkeycloak.theme.dir=$h/themes", "-Dkc.db-url-path=$kd",
+            '-cp', "$home_\lib\quarkus-run.jar", 'io.quarkus.bootstrap.runner.QuarkusEntryPoint',
+            'start-dev', '--http-host=127.0.0.1', '--http-port=8189', '--http-management-port=8190', '--health-enabled=true', '--db-url-properties=;WRITE_DELAY=0') | ForEach-Object { '"' + $_ + '"' }
+        function Start-Keycloak { Start-Server "$home_/jre/bin/java.exe" $kcArgs }
+        function Wait-Keycloak($first) {
+            $proc = $first
+            for ($i = 0; $i -lt 480; $i++) {
+                try { Invoke-RestMethod 'http://127.0.0.1:8190/health/ready' -TimeoutSec 2 | Out-Null; return $proc } catch { Start-Sleep -Milliseconds 500 }
+                if ($proc.HasExited) { $proc = Start-Keycloak }
+            }
+            throw "keycloak did not get ready: $((Get-Content "$tmp/out.log" -Tail 20) -join ' / ')"
+        }
+        $p = Start-Keycloak
+        Check 'ready' { $script:p = Wait-Keycloak $p }
+        Check 'admin login, create a realm' {
+            $t = Invoke-RestMethod -Method Post 'http://127.0.0.1:8189/realms/master/protocol/openid-connect/token' -Body @{ grant_type = 'password'; client_id = 'admin-cli'; username = 'admin'; password = 'admin' }
+            Invoke-RestMethod -Method Post 'http://127.0.0.1:8189/admin/realms' -Headers @{ Authorization = "Bearer $($t.access_token)" } -ContentType 'application/json' -Body '{"realm":"flock","enabled":true}' | Out-Null
+        }
+        Stop-Server $p
+        Check 'database is outside the package' { if (-not (Get-ChildItem $kcData -Recurse -Filter '*.mv.db')) { throw 'no database file' } }
+        $p = Start-Keycloak
+        Check 'restarts after being killed' { $script:p = Wait-Keycloak $p }
+        Check 'the realm survived' { Invoke-RestMethod 'http://127.0.0.1:8189/realms/flock' | Out-Null }
+        Stop-Server $p
+    }
     'cloudflared' {
         # Flock needs --allowed-mail (protected quick tunnels): without it a share would be unprotected.
         Check 'cloudflared' { ((Invoke-Native "$D/cloudflared.exe" @('--version')) -split "`n")[0] }

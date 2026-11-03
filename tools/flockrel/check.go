@@ -99,6 +99,16 @@ func (liveSources) eolCycles(product string) ([]eolCycle, error) {
 	return cycles, getJSON("https://endoflife.date/api/"+product+".json", &cycles)
 }
 
+// releaseVersion is the stable version a release tag names ("" for none), without the tag's prefix,
+// a "v" or a build after a + (Temurin's jdk-25.0.5+8 is 25.0.5).
+func releaseVersion(tag, prefix string) string {
+	s, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(tag, prefix), "v"), "+")
+	if !stableVersion.MatchString(s) {
+		return ""
+	}
+	return s
+}
+
 // githubVersions uses a repository's published releases, or its tags when it publishes none.
 func (liveSources) githubVersions(repo, prefix string) ([]string, error) {
 	var rels []release
@@ -124,7 +134,7 @@ func (liveSources) githubVersions(repo, prefix string) ([]string, error) {
 	}
 	var out []string
 	for _, n := range names {
-		if s := strings.TrimPrefix(strings.TrimPrefix(n, prefix), "v"); stableVersion.MatchString(s) {
+		if s := releaseVersion(n, prefix); s != "" {
 			out = append(out, s)
 		}
 	}
@@ -148,6 +158,7 @@ var lineSources = map[string]struct {
 	"meilisearch": {eol: "meilisearch"},
 	"typesense":   {github: "typesense/typesense"},
 	"rustfs":      {github: "rustfs/rustfs"},
+	"keycloak":    {github: "keycloak/keycloak"},
 	"cloudflared": {github: "cloudflare/cloudflared"},
 	"pgvector":    {github: "pgvector/pgvector"},
 	"timescaledb": {github: "timescale/timescaledb"},
@@ -158,7 +169,7 @@ var lineSources = map[string]struct {
 var displayNames = map[string]string{
 	"php": "PHP", "postgres": "PostgreSQL", "mariadb": "MariaDB", "mysql": "MySQL", "mongodb": "MongoDB",
 	"redis": "Redis", "valkey": "Valkey", "node": "Node.js", "meilisearch": "Meilisearch",
-	"typesense": "Typesense", "rustfs": "RustFS", "cloudflared": "cloudflared", "pgvector": "pgvector",
+	"typesense": "Typesense", "rustfs": "RustFS", "keycloak": "Keycloak", "cloudflared": "cloudflared", "pgvector": "pgvector",
 	"timescaledb": "TimescaleDB", "postgis": "PostGIS", "pgrouting": "pgRouting",
 }
 
@@ -334,6 +345,11 @@ func check(v *versions, phpBuildScript string, src sources, now time.Time) (find
 		if current := envPin(v, lib.key); current != "" {
 			pins = append(pins, pin{lib.name, current, lib.repo, lib.prefix, "`" + lib.key + "` of postgis or pgrouting (then raise their macOS and Linux `build`)", ""})
 		}
+	}
+	if jre := envPin(v, "JRE_VERSION"); jre != "" {
+		version, _, _ := strings.Cut(jre, "+")
+		pins = append(pins, pin{"Temurin JRE (Keycloak)", version, "adoptium/temurin" + truncate(version, 1) + "-binaries", "jdk-",
+			"`JRE_VERSION` of keycloak, with Temurin's build after the + (then raise its `build`)", ""})
 	}
 	if ossl := opensslPin(v); ossl != "" {
 		pins = append(pins, pin{"OpenSSL", ossl, "openssl/openssl", "openssl-", "`OPENSSL_VERSION` of postgres and mariadb (then raise their macOS and Linux `build`)", truncate(ossl, 2)})

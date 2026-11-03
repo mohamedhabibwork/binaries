@@ -180,6 +180,17 @@
         "linux-arm64": { "how": "mirror", "build": 1 }
       }
     },
+    "keycloak": {
+      "lines": ["26.7", "26.8"],
+      "platforms": {
+        "macos-arm64": { "how": "mirror", "build": 1 },
+        "windows-x64": { "how": "mirror", "build": 1 },
+        "linux-x64": { "how": "mirror", "build": 1 },
+        "linux-arm64": { "how": "mirror", "build": 1 }
+      },
+      "env": { "JRE_VERSION": "25.0.5+8" },
+      "publish_source": true
+    },
     "cloudflared": {
       "lines": ["2026"],
       "platforms": {

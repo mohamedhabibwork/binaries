@@ -1,7 +1,7 @@
 # Flock binaries
 
 Prebuilt PHP, FrankenPHP and services (PostgreSQL, MariaDB, MySQL, MongoDB, Valkey, Redis,
-Meilisearch, Typesense, RustFS, Node.js, cloudflared) for [Flock](https://github.com/flock-php/flock), built
+Meilisearch, Typesense, RustFS, Keycloak, Node.js, cloudflared) for [Flock](https://github.com/flock-php/flock), built
 reproducibly on GitHub Actions and published as GitHub Releases. Flock downloads them from a
 signed manifest, so nothing has to be compiled on your machine.
 
@@ -31,6 +31,7 @@ vendor's own binaries, checked against the vendor's checksum or signature.
 | `meilisearch` | mirrored (Community Edition) | mirrored (Community Edition) | mirrored (Community Edition) | 1 |
 | `typesense` | mirrored | – (no Windows build upstream) | mirrored | 29, 30 |
 | `rustfs` | mirrored | mirrored | mirrored | 1 |
+| `keycloak` | mirrored, with a Temurin JRE | mirrored, with a Temurin JRE | mirrored, with a Temurin JRE | 26.7, 26.8 |
 | `cloudflared` | mirrored (Cloudflare's signed build, for `flock share`) | mirrored (Cloudflare's signed build) | mirrored | 2026 |
 | `node` | mirrored | mirrored | mirrored | 16, 18, 20, 22, 24, 26 |
 
@@ -143,6 +144,7 @@ build has `flock-package.json` at the top (what it is, how it was built) and `LI
 | `mariadb` (macOS, Linux) | `bin/`, `scripts/mariadb-install-db`, `share/`, `lib/plugin/`; run with `--basedir` |
 | `valkey`, `redis` | `<name>-server`, `<name>-cli`, `<name>-benchmark` (Windows: with the MSYS2 DLLs) |
 | `meilisearch`, `rustfs`, `typesense`, `cloudflared` | the executable and its license |
+| `keycloak` | Keycloak's own layout (`lib/`, `conf/`, `themes/`, `bin/`) with Temurin's JRE in `jre/` |
 
 ### Things to know
 
@@ -157,6 +159,10 @@ build has `flock-package.json` at the top (what it is, how it was built) and `LI
   the administrator rights first.
 - **PHP on Windows** is only mirrored while it is windows.php.net's current build of its minor
   (older builds have no published checksum): a patch the daily run misses entirely is skipped.
+- **Keycloak** is the one package that bundles a Java runtime: upstream publishes only jars, so
+  each platform's package adds the Temurin JRE in `JRE_VERSION` (`packages/keycloak/mirror.sh`).
+  A newer JRE is reported by the weekly check like other pinned versions; updating it means
+  raising `build`. On Linux the libraries that link X11 and ALSA are removed, as Keycloak runs headless.
 - **Meilisearch** is only ever the MIT Community Edition, never the BUSL `meilisearch-enterprise-*`
   builds.
 
@@ -196,7 +202,8 @@ the same version.
 Each package contains the licenses of what it bundles in `LICENSES/` (mirrored archives: the
 vendor's own license files). For GPL, SSPL and AGPL software (MySQL, MariaDB, MongoDB, Typesense,
 Redis) the matching upstream source is published on the same release as
-`<package>-<version>-source.tar.gz`; Valkey for Windows has the source package of the MSYS2
+`<package>-<version>-source.tar.gz`; for Keycloak that archive holds Keycloak's source and the
+OpenJDK source of its JRE (GPLv2 with the Classpath Exception); Valkey for Windows has the source package of the MSYS2
 runtime it ships (LGPL) next to it.
 
 ## Upstream check

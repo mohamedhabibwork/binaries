@@ -39,6 +39,7 @@ func TestCheck(t *testing.T) {
 	    "redis": {"lines": ["8.4", "8.10"]},
 	    "meilisearch": {"lines": ["1"]},
 	    "typesense": {"lines": ["30"]},
+	    "keycloak": {"lines": ["26.8"], "env": {"JRE_VERSION": "25.0.5+8"}},
 	    "postgres": {"lines": ["18"], "env": {"OPENSSL_VERSION": "3.5.9"}}
 	  }}`), &v); err != nil {
 		t.Fatal(err)
@@ -53,15 +54,17 @@ func TestCheck(t *testing.T) {
 			"postgresql":  {cyc("18", "2025-09-25", "2030-11-14", false)},
 		},
 		github: map[string][]string{
-			"typesense/typesense":         {"31.0", "30.2"},
-			"php/frankenphp":              {"1.14.0", "1.13.0"},
-			"crazywhalecc/static-php-cli": {"2.8.5"},
-			"openssl/openssl":             {"4.0.3", "3.5.10", "3.5.9"},
-			"xdebug/xdebug":               {"3.6.0", "3.5.3"},
+			"typesense/typesense":                              {"31.0", "30.2"},
+			"keycloak/keycloak":                                {"26.9.0", "26.8.1"},
+			"adoptium/temurin25-binaries":                      {"25.0.6", "25.0.5"},
+			"php/frankenphp":                                   {"1.14.0", "1.13.0"},
+			"crazywhalecc/static-php-cli":                      {"2.8.5"},
+			"openssl/openssl":                                  {"4.0.3", "3.5.10", "3.5.9"},
+			"xdebug/xdebug":                                    {"3.6.0", "3.5.3"},
 			"open-telemetry/opentelemetry-php-instrumentation": {"1.5.0", "1.4.2"},
-			"igbinary/igbinary":        {"3.2.17", "3.2.16"},
-			"krakjoe/apcu":             {"5.1.28"},
-			"mongodb/mongo-php-driver": {"2.5.5", "1.21.12"},
+			"igbinary/igbinary":                                {"3.2.17", "3.2.16"},
+			"krakjoe/apcu":                                     {"5.1.28"},
+			"mongodb/mongo-php-driver":                         {"2.5.5", "1.21.12"},
 		},
 		rcs: map[string]string{"8.5.13": "8.5.13RC1", "8.7.0": "8.7.0RC1", "8.6.1": "8.6.1RC1"},
 	}
@@ -82,6 +85,7 @@ func TestCheck(t *testing.T) {
 		"New release line: Redis 8.12",
 		"New release line: Meilisearch 2",
 		"New release line: Typesense 31",
+		"New release line: Keycloak 26.9",
 		"Updates available for pinned versions",
 	}
 	for _, w := range want {
@@ -120,6 +124,21 @@ func TestCheck(t *testing.T) {
 	for _, not := range []string{"static-php-cli", "apcu", "mongodb"} {
 		if strings.Contains(pins, "| "+not) {
 			t.Errorf("pins list %s, which is current:\n%s", not, pins)
+		}
+	}
+}
+
+func TestReleaseVersion(t *testing.T) {
+	for _, c := range []struct{ tag, prefix, want string }{
+		{"jdk-25.0.5+8", "jdk-", "25.0.5"}, // Temurin: the build after the + isn't part of the version
+		{"v1.2.3", "", "1.2.3"},
+		{"openssl-3.5.9", "openssl-", "3.5.9"},
+		{"26.8.1", "", "26.8.1"},
+		{"9.2.0-rc1", "", ""},
+		{"nightly", "", ""},
+	} {
+		if got := releaseVersion(c.tag, c.prefix); got != c.want {
+			t.Errorf("releaseVersion(%q, %q) = %q, want %q", c.tag, c.prefix, got, c.want)
 		}
 	}
 }

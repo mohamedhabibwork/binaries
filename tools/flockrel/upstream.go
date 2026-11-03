@@ -19,6 +19,7 @@ var latestFuncs = map[string]func(lines []string) (map[string]string, error){
 	"meilisearch": latestFromGitHubReleases("meilisearch/meilisearch"),
 	"typesense":   latestFromGitHubReleases("typesense/typesense"),
 	"rustfs":      latestFromGitHubReleases("rustfs/rustfs"),
+	"keycloak":    latestFromGitHubReleases("keycloak/keycloak"),
 	"cloudflared": latestFromGitHubReleases("cloudflare/cloudflared"),
 	"node":        latestNode,
 	"pgvector":    latestFromGitHubTags("pgvector/pgvector"),
